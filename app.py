@@ -1,19 +1,38 @@
-# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.colors import LinearSegmentedColormap
 from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 
-# --- PAGE CONFIG ---
+matplotlib.rcParams['figure.facecolor'] = '#020408'
+matplotlib.rcParams['axes.facecolor']   = '#020408'
+matplotlib.rcParams['text.color']       = '#8ab4cc'
+matplotlib.rcParams['axes.labelcolor']  = '#4a6a82'
+matplotlib.rcParams['xtick.color']      = '#4a6a82'
+matplotlib.rcParams['ytick.color']      = '#4a6a82'
+matplotlib.rcParams['axes.edgecolor']   = 'rgba(0,0,0,0)'
+matplotlib.rcParams['grid.color']       = '#0a1a2a'
+matplotlib.rcParams['grid.linewidth']   = 0.6
+matplotlib.rcParams['font.family']      = 'monospace'
+
+CYAN   = '#00f5ff'
+PINK   = '#ff006e'
+GOLD   = '#ffd60a'
+VIOLET = '#7b2fff'
+GREEN  = '#00ff9d'
+BG0    = '#020408'
+BG2    = '#0a1628'
+
 st.set_page_config(
     page_title="AURORA DEFECT NEXUS",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CSS THEME ---
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&family=Share+Tech+Mono&display=swap');
@@ -87,13 +106,6 @@ div[data-testid="stMetricDelta"] {
   font-size: 0.68rem !important;
 }
 
-div[data-testid="stPlotlyChart"] {
-  background: rgba(6,12,20,0.8) !important;
-  border: 1px solid rgba(0,245,255,0.1) !important;
-  border-radius: 6px !important;
-  padding: 6px !important;
-}
-
 hr {
   border: none !important;
   border-top: 1px solid rgba(0,245,255,0.12) !important;
@@ -116,7 +128,6 @@ div[data-testid="stButton"] > button {
 div[data-testid="stButton"] > button:hover {
   background: #00f5ff !important;
   color: #020408 !important;
-  box-shadow: 0 0 22px rgba(0,245,255,0.4) !important;
 }
 
 textarea {
@@ -167,8 +178,7 @@ div[data-testid="stExpander"] {
 
 .dot-green {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: #00ff9d;
   box-shadow: 0 0 8px #00ff9d;
@@ -290,20 +300,6 @@ div[data-testid="stExpander"] {
 """, unsafe_allow_html=True)
 
 
-# --- PLOTLY BASE LAYOUT ---
-LAYOUT = dict(
-    paper_bgcolor='rgba(0,0,0,0)',
-    plot_bgcolor='rgba(0,0,0,0)',
-    font=dict(family='Rajdhani, sans-serif', color='#4a6a82', size=12),
-    xaxis=dict(gridcolor='rgba(0,245,255,0.06)', linecolor='rgba(0,245,255,0.15)'),
-    yaxis=dict(gridcolor='rgba(0,245,255,0.06)', linecolor='rgba(0,245,255,0.15)'),
-    legend=dict(bgcolor='rgba(6,12,20,0.8)', bordercolor='rgba(0,245,255,0.2)', borderwidth=1),
-    margin=dict(l=10, r=10, t=30, b=10),
-    colorway=['#00f5ff', '#ff006e', '#ffd60a', '#7b2fff', '#00ff9d'],
-)
-
-
-# --- DATA LOADER ---
 def load_data(file):
     df = pd.read_csv(file)
     df.columns = [c.strip().replace(' ', '_').capitalize() for c in df.columns]
@@ -315,7 +311,149 @@ def load_data(file):
     return df
 
 
-# --- SIDEBAR ---
+def fig_to_streamlit(fig):
+    st.pyplot(fig, use_container_width=True)
+    plt.close(fig)
+
+
+def make_burnup(df, total):
+    daily_c = df.groupby(df['Created'].dt.date).size().cumsum()
+    res_df  = df.dropna(subset=['Resolved'])
+    daily_r = res_df.groupby(res_df['Resolved'].dt.date).size().cumsum()
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    fig.patch.set_facecolor(BG0)
+    ax.set_facecolor(BG0)
+
+    ax.fill_between(daily_c.index, daily_c.values, alpha=0.06, color=PINK)
+    ax.plot(daily_c.index, daily_c.values, color=PINK, linewidth=1.8,
+            linestyle='--', label='Scope Created')
+
+    ax.fill_between(daily_r.index, daily_r.values, alpha=0.1, color=CYAN)
+    ax.plot(daily_r.index, daily_r.values, color=CYAN, linewidth=2.5,
+            label='Resolution Burnup')
+
+    forecast_date = None
+    if len(daily_r) > 5:
+        yv  = daily_r.values.reshape(-1, 1)
+        Xv  = np.arange(len(yv)).reshape(-1, 1)
+        mdl = LinearRegression().fit(Xv, yv)
+        dl  = max(0, (total - float(yv[-1][0])) / (float(mdl.coef_[0][0]) + 0.01))
+        forecast_date = datetime.now().date() + timedelta(days=int(dl))
+        fx  = np.arange(len(yv), len(yv) + int(dl) + 1).reshape(-1, 1)
+        fy  = mdl.predict(fx).flatten()
+        fd  = [daily_r.index[-1] + timedelta(days=i + 1) for i in range(len(fx))]
+        ax.plot(fd, fy, color=VIOLET, linewidth=2, linestyle='--', label='Forecast')
+        ax.axhline(y=total, color=GOLD, linewidth=1, linestyle=':', alpha=0.7)
+        ax.text(daily_c.index[len(daily_c)//2], total * 1.01, 'SCOPE CEILING',
+                color=GOLD, fontsize=7, alpha=0.8)
+
+    ax.tick_params(colors='#4a6a82', labelsize=8)
+    ax.xaxis.set_major_locator(matplotlib.dates.AutoDateLocator())
+    ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%d %b'))
+    plt.xticks(rotation=30, ha='right')
+    ax.grid(True, alpha=0.15, color='#0a2a3a')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#0a2a3a')
+    ax.legend(facecolor='#060c14', edgecolor='#1a3a4a',
+              labelcolor='#8ab4cc', fontsize=8)
+    fig.tight_layout()
+    return fig, forecast_date
+
+
+def make_priority_bar(df):
+    pc = df.groupby('Priority').size().reset_index(name='count')
+    colors = [CYAN, PINK, GOLD, VIOLET, GREEN]
+
+    fig, ax = plt.subplots(figsize=(5, 3.5))
+    fig.patch.set_facecolor(BG0)
+    ax.set_facecolor(BG0)
+
+    bars = ax.bar(pc['Priority'], pc['count'],
+                  color=colors[:len(pc)], edgecolor='none', width=0.6)
+
+    for bar, val in zip(bars, pc['count']):
+        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
+                str(val), ha='center', va='bottom', color='#8ab4cc', fontsize=8)
+
+    ax.tick_params(colors='#4a6a82', labelsize=8)
+    ax.grid(axis='y', alpha=0.15, color='#0a2a3a')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#0a2a3a')
+    fig.tight_layout()
+    return fig
+
+
+def make_scatter(df):
+    wl = df.groupby('Assignee').agg(
+        Count=('Issue_key', 'count'),
+        Avg_days=('Lead_time', 'mean')
+    ).reset_index()
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    fig.patch.set_facecolor(BG0)
+    ax.set_facecolor(BG0)
+
+    cmap = LinearSegmentedColormap.from_list('cx', [CYAN, GOLD, PINK])
+    norm = plt.Normalize(wl['Avg_days'].min(), wl['Avg_days'].max())
+
+    sc = ax.scatter(
+        wl['Count'], wl['Avg_days'],
+        c=wl['Avg_days'], cmap=cmap, norm=norm,
+        s=wl['Count'] * 12 + 40, alpha=0.85,
+        edgecolors='rgba(0,0,0,0)', linewidths=0
+    )
+
+    for _, row in wl.iterrows():
+        ax.annotate(row['Assignee'],
+                    xy=(row['Count'], row['Avg_days']),
+                    xytext=(4, 4), textcoords='offset points',
+                    color='#8ab4cc', fontsize=7)
+
+    ax.set_xlabel('Defect Load', color='#4a6a82', fontsize=8)
+    ax.set_ylabel('Avg Days to Resolve', color='#4a6a82', fontsize=8)
+    ax.tick_params(colors='#4a6a82', labelsize=8)
+    ax.grid(True, alpha=0.15, color='#0a2a3a')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#0a2a3a')
+    fig.tight_layout()
+    return fig
+
+
+def make_heatmap(df):
+    df_h = df.dropna(subset=['Created']).copy()
+    df_h['DOW']  = df_h['Created'].dt.dayofweek
+    df_h['Week'] = df_h['Created'].dt.isocalendar().week.astype(int)
+
+    weeks  = sorted(df_h['Week'].unique())
+    days   = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    matrix = np.zeros((7, len(weeks)))
+
+    week_idx = {w: i for i, w in enumerate(weeks)}
+    for _, row in df_h.iterrows():
+        d = int(row['DOW'])
+        w = int(row['Week'])
+        if w in week_idx:
+            matrix[d, week_idx[w]] += 1
+
+    fig, ax = plt.subplots(figsize=(12, 2.8))
+    fig.patch.set_facecolor(BG0)
+    ax.set_facecolor(BG0)
+
+    cmap = LinearSegmentedColormap.from_list('heat', ['#020408', '#002233', '#005577', CYAN])
+    ax.imshow(matrix, aspect='auto', cmap=cmap, interpolation='nearest')
+
+    ax.set_yticks(range(7))
+    ax.set_yticklabels(days, color='#4a6a82', fontsize=8)
+    ax.set_xticks(range(len(weeks)))
+    ax.set_xticklabels([f'W{w}' for w in weeks], color='#4a6a82', fontsize=7, rotation=45)
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#0a2a3a')
+    fig.tight_layout()
+    return fig
+
+
+# ---- SIDEBAR ----
 with st.sidebar:
     st.markdown('<div class="sidebar-brand">AURORA NEXUS</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-sub">Defect Intelligence v4.1</div>', unsafe_allow_html=True)
@@ -334,13 +472,13 @@ with st.sidebar:
         target_sla = 7
     st.markdown("""
     <div style="margin-top:30px; font-family:'Share Tech Mono',monospace; font-size:0.58rem;
-                color:rgba(74,106,130,0.4); letter-spacing:0.1em; line-height:2;">
+                color:rgba(74,106,130,0.4); letter-spacing:0.1em; line-height:2.2;">
       BUILD 2024.11<br>CLEARANCE: EXECUTIVE<br>ENCRYPTION: AES-256
     </div>
     """, unsafe_allow_html=True)
 
 
-# --- MAIN DASHBOARD ---
+# ---- MAIN ----
 if uploaded_file:
     raw_df = load_data(uploaded_file)
 
@@ -357,7 +495,7 @@ if uploaded_file:
     )
     df = raw_df[raw_df['Priority'].isin(priorities)]
 
-    # --- KPIs ---
+    # KPIs
     st.markdown("""
     <div class="sec-hdr">
       <span class="sec-title">VITAL SIGNS</span>
@@ -380,7 +518,7 @@ if uploaded_file:
 
     st.divider()
 
-    # --- BURNUP + POLAR ---
+    # Burnup + Priority
     col_l, col_r = st.columns([2, 1], gap="medium")
 
     with col_l:
@@ -390,48 +528,8 @@ if uploaded_file:
           <div class="sec-line"></div>
         </div>
         """, unsafe_allow_html=True)
-
-        daily_c = df.groupby(df['Created'].dt.date).size().cumsum()
-        res_df  = df.dropna(subset=['Resolved'])
-        daily_r = res_df.groupby(res_df['Resolved'].dt.date).size().cumsum()
-
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=list(daily_c.index), y=list(daily_c.values),
-            name="Scope Created",
-            line=dict(color='#ff006e', width=2, dash='dot'),
-            fill='tozeroy', fillcolor='rgba(255,0,110,0.04)'
-        ))
-        fig.add_trace(go.Scatter(
-            x=list(daily_r.index), y=list(daily_r.values),
-            name="Resolution Burnup",
-            line=dict(color='#00f5ff', width=2.5),
-            fill='tozeroy', fillcolor='rgba(0,245,255,0.07)'
-        ))
-
-        forecast_date = None
-        if len(daily_r) > 5:
-            yv  = daily_r.values.reshape(-1, 1)
-            Xv  = np.arange(len(yv)).reshape(-1, 1)
-            mdl = LinearRegression().fit(Xv, yv)
-            dl  = max(0, (total - float(yv[-1][0])) / (float(mdl.coef_[0][0]) + 0.01))
-            forecast_date = datetime.now().date() + timedelta(days=int(dl))
-            fx = np.arange(len(yv), len(yv) + int(dl) + 1).reshape(-1, 1)
-            fy = mdl.predict(fx).flatten()
-            fd = [daily_r.index[-1] + timedelta(days=i + 1) for i in range(len(fx))]
-            fig.add_trace(go.Scatter(
-                x=fd, y=list(fy), name="Forecast",
-                line=dict(color='#7b2fff', width=2, dash='dash')
-            ))
-            fig.add_hline(
-                y=total, line_dash='dot', line_color='#ffd60a', opacity=0.6,
-                annotation_text="SCOPE CEILING",
-                annotation_font_color='#ffd60a', annotation_font_size=10
-            )
-
-        fig.update_layout(**LAYOUT, height=360)
-        st.plotly_chart(fig, use_container_width=True)
-
+        fig_b, forecast_date = make_burnup(df, total)
+        fig_to_streamlit(fig_b)
         if forecast_date:
             st.info(f"PREDICTIVE SIGNAL: Backlog clearance projected {forecast_date.strftime('%d %b %Y')}")
 
@@ -442,27 +540,8 @@ if uploaded_file:
           <div class="sec-line"></div>
         </div>
         """, unsafe_allow_html=True)
-
-        pc     = df.groupby('Priority').size().reset_index(name='count')
-        colors = ['#00f5ff', '#ff006e', '#ffd60a', '#7b2fff', '#00ff9d']
-
-        fig_r = go.Figure(go.Barpolar(
-            r=list(pc['count']),
-            theta=list(pc['Priority']),
-            marker_color=colors[:len(pc)],
-            marker_line_color='rgba(0,0,0,0)',
-            opacity=0.85
-        ))
-        fig_r.update_layout(
-            **LAYOUT, height=300,
-            polar=dict(
-                bgcolor='rgba(0,0,0,0)',
-                radialaxis=dict(gridcolor='rgba(0,245,255,0.1)', linecolor='rgba(0,245,255,0.1)'),
-                angularaxis=dict(gridcolor='rgba(0,245,255,0.08)')
-            )
-        )
-        st.plotly_chart(fig_r, use_container_width=True)
-
+        fig_to_streamlit(make_priority_bar(df))
+        pc  = df.groupby('Priority').size().reset_index(name='count')
         top = pc.sort_values('count', ascending=False).iloc[0]
         st.markdown(f"""
         <div class="stat-chip">
@@ -473,7 +552,7 @@ if uploaded_file:
 
     st.divider()
 
-    # --- SCATTER + LOG ---
+    # Scatter + Log
     bl, br = st.columns(2, gap="medium")
 
     with bl:
@@ -483,33 +562,7 @@ if uploaded_file:
           <div class="sec-line"></div>
         </div>
         """, unsafe_allow_html=True)
-
-        wl = df.groupby('Assignee').agg(
-            Count=('Issue_key', 'count'),
-            Avg_days=('Lead_time', 'mean')
-        ).reset_index()
-
-        fig_s = go.Figure(go.Scatter(
-            x=list(wl['Count']),
-            y=list(wl['Avg_days']),
-            mode='markers+text',
-            text=list(wl['Assignee']),
-            textposition='top center',
-            textfont=dict(size=9, color='#8ab4cc'),
-            marker=dict(
-                size=list(wl['Count'].apply(lambda v: max(8, min(v * 0.4, 40)))),
-                color=list(wl['Avg_days']),
-                colorscale=[[0, '#00f5ff'], [0.5, '#ffd60a'], [1, '#ff006e']],
-                line=dict(width=1, color='rgba(0,245,255,0.3)'),
-                showscale=False
-            )
-        ))
-        fig_s.update_layout(
-            **LAYOUT, height=320,
-            xaxis=dict(title='Defect Load', gridcolor='rgba(0,245,255,0.06)'),
-            yaxis=dict(title='Avg Days to Resolve', gridcolor='rgba(0,245,255,0.06)')
-        )
-        st.plotly_chart(fig_s, use_container_width=True)
+        fig_to_streamlit(make_scatter(df))
 
     with br:
         st.markdown("""
@@ -518,7 +571,6 @@ if uploaded_file:
           <div class="sec-line"></div>
         </div>
         """, unsafe_allow_html=True)
-
         note = st.text_area(
             "Commentary",
             placeholder="Enter executive analysis here...",
@@ -528,53 +580,29 @@ if uploaded_file:
         b1, b2 = st.columns(2)
         with b1:
             if st.button("COMMIT TO LOG", use_container_width=True):
-                if note.strip():
-                    st.success("Commentary archived.")
-                else:
-                    st.warning("No input detected.")
+                st.success("Commentary archived.") if note.strip() else st.warning("No input detected.")
         with b2:
             if st.button("EXPORT REPORT", use_container_width=True):
                 st.info("Export pipeline initializing...")
 
     st.divider()
 
-    # --- HEATMAP ---
+    # Heatmap
     st.markdown("""
     <div class="sec-hdr">
       <span class="sec-title">CREATION VELOCITY HEATMAP</span>
       <div class="sec-line"></div>
     </div>
     """, unsafe_allow_html=True)
+    fig_to_streamlit(make_heatmap(df))
 
-    df_h = df.dropna(subset=['Created']).copy()
-    df_h['DOW']  = df_h['Created'].dt.day_name()
-    df_h['Week'] = df_h['Created'].dt.isocalendar().week.astype(str)
-    hd = df_h.groupby(['DOW', 'Week']).size().reset_index(name='count')
-    order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    hd['DOW'] = pd.Categorical(hd['DOW'], categories=order, ordered=True)
-    hd = hd.sort_values('DOW')
-
-    fig_h = go.Figure(go.Histogram2d(
-        x=list(hd['Week']),
-        y=list(hd['DOW'].astype(str)),
-        z=list(hd['count']),
-        histfunc='sum',
-        colorscale=[[0, '#020408'], [0.3, '#002233'], [0.6, '#005577'], [1, '#00f5ff']],
-        showscale=False
-    ))
-    fig_h.update_layout(**LAYOUT, height=240)
-    st.plotly_chart(fig_h, use_container_width=True)
-
-    # --- RAW DATA ---
+    # Raw data
     with st.expander("RAW DATA AUDIT TRACE"):
         st.dataframe(
-            df.style
-              .background_gradient(subset=['Lead_time'], cmap='YlOrRd')
-              .highlight_null(color='#1a0a0a'),
+            df.style.background_gradient(subset=['Lead_time'], cmap='YlOrRd'),
             use_container_width=True
         )
 
-# --- LANDING STATE ---
 else:
     st.markdown("""
     <div class="hero-wrap">
@@ -582,7 +610,7 @@ else:
       <div class="hero-sub">Defect Intelligence Command System | Build 2024.11</div>
       <div class="hero-desc">
         Upload a Jira CSV export to initialize the executive intelligence dashboard.
-        Real-time forecasting, velocity analysis, and risk commentary await.
+        Real-time forecasting, velocity analysis and risk commentary await.
       </div>
       <div style="margin-top:32px; display:flex; justify-content:center; gap:36px;
                   font-family:'Share Tech Mono',monospace; font-size:0.66rem;
