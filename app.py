@@ -1,7 +1,7 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
@@ -18,21 +18,9 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&family=Share+Tech+Mono&display=swap');
 
-:root {
-  --cyan: #00f5ff;
-  --pink: #ff006e;
-  --gold: #ffd60a;
-  --violet: #7b2fff;
-  --green: #00ff9d;
-  --bg0: #020408;
-  --bg2: #0a1628;
-  --t1: #e8f4fd;
-  --t3: #4a6a82;
-}
-
 html, body, .stApp {
-  background: var(--bg0) !important;
-  color: var(--t1) !important;
+  background: #020408 !important;
+  color: #e8f4fd !important;
   font-family: 'Rajdhani', sans-serif !important;
 }
 
@@ -73,7 +61,7 @@ div[data-testid="stMetric"] {
 }
 
 div[data-testid="stMetric"]:hover {
-  border-color: var(--cyan) !important;
+  border-color: #00f5ff !important;
   box-shadow: 0 0 28px rgba(0,245,255,0.18) !important;
   transform: translateY(-2px);
 }
@@ -90,7 +78,7 @@ div[data-testid="stMetricValue"] {
   font-family: 'Orbitron', monospace !important;
   font-size: 2rem !important;
   font-weight: 700 !important;
-  color: var(--cyan) !important;
+  color: #00f5ff !important;
   text-shadow: 0 0 18px rgba(0,245,255,0.5) !important;
 }
 
@@ -119,14 +107,14 @@ div[data-testid="stButton"] > button {
   letter-spacing: 0.15em !important;
   text-transform: uppercase !important;
   background: transparent !important;
-  border: 1px solid var(--cyan) !important;
-  color: var(--cyan) !important;
+  border: 1px solid #00f5ff !important;
+  color: #00f5ff !important;
   border-radius: 3px !important;
   transition: all 0.25s ease !important;
 }
 
 div[data-testid="stButton"] > button:hover {
-  background: var(--cyan) !important;
+  background: #00f5ff !important;
   color: #020408 !important;
   box-shadow: 0 0 22px rgba(0,245,255,0.4) !important;
 }
@@ -134,7 +122,7 @@ div[data-testid="stButton"] > button:hover {
 textarea {
   background: #0a1628 !important;
   border: 1px solid rgba(0,245,255,0.2) !important;
-  color: var(--t1) !important;
+  color: #e8f4fd !important;
   font-family: 'Share Tech Mono', monospace !important;
   font-size: 0.78rem !important;
 }
@@ -342,6 +330,8 @@ with st.sidebar:
         st.success("Data stream connected")
         st.markdown("<br>", unsafe_allow_html=True)
         target_sla = st.slider("SLA Target (Days)", 1, 30, 7)
+    else:
+        target_sla = 7
     st.markdown("""
     <div style="margin-top:30px; font-family:'Share Tech Mono',monospace; font-size:0.58rem;
                 color:rgba(74,106,130,0.4); letter-spacing:0.1em; line-height:2;">
@@ -367,7 +357,7 @@ if uploaded_file:
     )
     df = raw_df[raw_df['Priority'].isin(priorities)]
 
-    # KPIs
+    # --- KPIs ---
     st.markdown("""
     <div class="sec-hdr">
       <span class="sec-title">VITAL SIGNS</span>
@@ -383,14 +373,14 @@ if uploaded_file:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("TOTAL DEFECTS",  f"{total:,}")
     c2.metric("ACTIVE BACKLOG", f"{backlog:,}",
-              f"{int(backlog/total*100)}% of scope", delta_color="inverse")
+              f"{int(backlog / total * 100)}% of scope", delta_color="inverse")
     c3.metric("REOPEN RATE",    f"{reopen_pct:.1f}%",
               "-2.1% quality boost", delta_color="normal")
     c4.metric("AVG RESOLUTION", f"{avg_lt:.1f}d", f"SLA: {target_sla}d")
 
     st.divider()
 
-    # Burnup + Radar
+    # --- BURNUP + POLAR ---
     col_l, col_r = st.columns([2, 1], gap="medium")
 
     with col_l:
@@ -407,12 +397,14 @@ if uploaded_file:
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(
-            x=daily_c.index, y=daily_c.values, name="Scope Created",
+            x=list(daily_c.index), y=list(daily_c.values),
+            name="Scope Created",
             line=dict(color='#ff006e', width=2, dash='dot'),
             fill='tozeroy', fillcolor='rgba(255,0,110,0.04)'
         ))
         fig.add_trace(go.Scatter(
-            x=daily_r.index, y=daily_r.values, name="Resolution Burnup",
+            x=list(daily_r.index), y=list(daily_r.values),
+            name="Resolution Burnup",
             line=dict(color='#00f5ff', width=2.5),
             fill='tozeroy', fillcolor='rgba(0,245,255,0.07)'
         ))
@@ -422,13 +414,13 @@ if uploaded_file:
             yv  = daily_r.values.reshape(-1, 1)
             Xv  = np.arange(len(yv)).reshape(-1, 1)
             mdl = LinearRegression().fit(Xv, yv)
-            dl  = max(0, (total - yv[-1][0]) / (mdl.coef_[0][0] + 0.01))
+            dl  = max(0, (total - float(yv[-1][0])) / (float(mdl.coef_[0][0]) + 0.01))
             forecast_date = datetime.now().date() + timedelta(days=int(dl))
             fx = np.arange(len(yv), len(yv) + int(dl) + 1).reshape(-1, 1)
             fy = mdl.predict(fx).flatten()
-            fd = [daily_r.index[-1] + timedelta(days=i+1) for i in range(len(fx))]
+            fd = [daily_r.index[-1] + timedelta(days=i + 1) for i in range(len(fx))]
             fig.add_trace(go.Scatter(
-                x=fd, y=fy, name="Forecast",
+                x=fd, y=list(fy), name="Forecast",
                 line=dict(color='#7b2fff', width=2, dash='dash')
             ))
             fig.add_hline(
@@ -446,16 +438,21 @@ if uploaded_file:
     with col_r:
         st.markdown("""
         <div class="sec-hdr">
-          <span class="sec-title">PRIORITY RADAR</span>
+          <span class="sec-title">PRIORITY BREAKDOWN</span>
           <div class="sec-line"></div>
         </div>
         """, unsafe_allow_html=True)
 
-        pc    = df.groupby('Priority').size().reset_index(name='count')
-        fig_r = px.bar_polar(
-            pc, r='count', theta='Priority', color='Priority',
-            color_discrete_sequence=['#00f5ff','#ff006e','#ffd60a','#7b2fff','#00ff9d']
-        )
+        pc     = df.groupby('Priority').size().reset_index(name='count')
+        colors = ['#00f5ff', '#ff006e', '#ffd60a', '#7b2fff', '#00ff9d']
+
+        fig_r = go.Figure(go.Barpolar(
+            r=list(pc['count']),
+            theta=list(pc['Priority']),
+            marker_color=colors[:len(pc)],
+            marker_line_color='rgba(0,0,0,0)',
+            opacity=0.85
+        ))
         fig_r.update_layout(
             **LAYOUT, height=300,
             polar=dict(
@@ -465,6 +462,7 @@ if uploaded_file:
             )
         )
         st.plotly_chart(fig_r, use_container_width=True)
+
         top = pc.sort_values('count', ascending=False).iloc[0]
         st.markdown(f"""
         <div class="stat-chip">
@@ -475,7 +473,7 @@ if uploaded_file:
 
     st.divider()
 
-    # Scatter + Log
+    # --- SCATTER + LOG ---
     bl, br = st.columns(2, gap="medium")
 
     with bl:
@@ -486,20 +484,31 @@ if uploaded_file:
         </div>
         """, unsafe_allow_html=True)
 
-        wl    = df.groupby('Assignee').agg(
-            Count=('Issue_key','count'), Avg_days=('Lead_time','mean')
+        wl = df.groupby('Assignee').agg(
+            Count=('Issue_key', 'count'),
+            Avg_days=('Lead_time', 'mean')
         ).reset_index()
-        fig_s = px.scatter(
-            wl, x='Count', y='Avg_days', text='Assignee', size='Count',
-            color='Avg_days',
-            color_continuous_scale=[[0,'#00f5ff'],[0.5,'#ffd60a'],[1,'#ff006e']],
-            labels={'Count':'Defect Load','Avg_days':'Avg Days to Resolve'}
+
+        fig_s = go.Figure(go.Scatter(
+            x=list(wl['Count']),
+            y=list(wl['Avg_days']),
+            mode='markers+text',
+            text=list(wl['Assignee']),
+            textposition='top center',
+            textfont=dict(size=9, color='#8ab4cc'),
+            marker=dict(
+                size=list(wl['Count'].apply(lambda v: max(8, min(v * 0.4, 40)))),
+                color=list(wl['Avg_days']),
+                colorscale=[[0, '#00f5ff'], [0.5, '#ffd60a'], [1, '#ff006e']],
+                line=dict(width=1, color='rgba(0,245,255,0.3)'),
+                showscale=False
+            )
+        ))
+        fig_s.update_layout(
+            **LAYOUT, height=320,
+            xaxis=dict(title='Defect Load', gridcolor='rgba(0,245,255,0.06)'),
+            yaxis=dict(title='Avg Days to Resolve', gridcolor='rgba(0,245,255,0.06)')
         )
-        fig_s.update_traces(
-            textfont_size=9, textfont_color='#8ab4cc',
-            marker=dict(line=dict(width=1, color='rgba(0,245,255,0.3)'))
-        )
-        fig_s.update_layout(**LAYOUT, height=320, coloraxis_showscale=False)
         st.plotly_chart(fig_s, use_container_width=True)
 
     with br:
@@ -529,7 +538,7 @@ if uploaded_file:
 
     st.divider()
 
-    # Heatmap
+    # --- HEATMAP ---
     st.markdown("""
     <div class="sec-hdr">
       <span class="sec-title">CREATION VELOCITY HEATMAP</span>
@@ -537,23 +546,26 @@ if uploaded_file:
     </div>
     """, unsafe_allow_html=True)
 
-    df_h  = df.dropna(subset=['Created']).copy()
+    df_h = df.dropna(subset=['Created']).copy()
     df_h['DOW']  = df_h['Created'].dt.day_name()
     df_h['Week'] = df_h['Created'].dt.isocalendar().week.astype(str)
-    hd    = df_h.groupby(['DOW','Week']).size().reset_index(name='count')
-    order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    hd = df_h.groupby(['DOW', 'Week']).size().reset_index(name='count')
+    order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
     hd['DOW'] = pd.Categorical(hd['DOW'], categories=order, ordered=True)
-    hd    = hd.sort_values('DOW')
+    hd = hd.sort_values('DOW')
 
-    fig_h = px.density_heatmap(
-        hd, x='Week', y='DOW', z='count',
-        color_continuous_scale=[[0,'#020408'],[0.3,'#002233'],[0.6,'#005577'],[1,'#00f5ff']],
-        nbinsx=30
-    )
-    fig_h.update_layout(**LAYOUT, height=220, coloraxis_showscale=False)
+    fig_h = go.Figure(go.Histogram2d(
+        x=list(hd['Week']),
+        y=list(hd['DOW'].astype(str)),
+        z=list(hd['count']),
+        histfunc='sum',
+        colorscale=[[0, '#020408'], [0.3, '#002233'], [0.6, '#005577'], [1, '#00f5ff']],
+        showscale=False
+    ))
+    fig_h.update_layout(**LAYOUT, height=240)
     st.plotly_chart(fig_h, use_container_width=True)
 
-    # Raw data
+    # --- RAW DATA ---
     with st.expander("RAW DATA AUDIT TRACE"):
         st.dataframe(
             df.style
