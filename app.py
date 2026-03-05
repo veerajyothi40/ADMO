@@ -1,749 +1,867 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>AURORA NEXUS // Defect Intelligence</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime, timedelta
+from sklearn.linear_model import LinearRegression
+
+# ---------------------------------------------
+# 1. PAGE CONFIG
+# ---------------------------------------------
+st.set_page_config(
+    page_title="AURORA // DEFECT NEXUS",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    page_icon="⬡"
+)
+
+# ---------------------------------------------
+# 2. MINDBLOWING CSS - CYBERPUNK HOLOGRAPHIC
+# ---------------------------------------------
+st.markdown("""
 <style>
-:root{
-  --cyan:#00f5ff;--pink:#ff006e;--gold:#ffd60a;--violet:#7b2fff;--green:#00ff9d;
-  --bg0:#020408;--bg1:#060c14;--bg2:#0a1628;--bg3:#0f1f3a;
-  --t1:#e8f4fd;--t2:#8ab4cc;--t3:#4a6a82;
-}
-*{margin:0;padding:0;box-sizing:border-box;}
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&family=Share+Tech+Mono&display=swap');
 
-/* ── BODY & GRID BG ── */
-body{
-  background:var(--bg0);color:var(--t1);
-  font-family:'Rajdhani',sans-serif;font-size:15px;
-  min-height:100vh;overflow-x:hidden;
+/* -- ROOT VARIABLES -- */
+:root {
+  --neon-cyan:   #00f5ff;
+  --neon-pink:   #ff006e;
+  --neon-gold:   #ffd60a;
+  --neon-violet: #7b2fff;
+  --bg-void:     #020408;
+  --bg-surface:  #060c14;
+  --bg-panel:    #0a1628;
+  --border-glow: rgba(0,245,255,0.25);
+  --text-primary:#e8f4fd;
+  --text-muted:  #6a8ba8;
+  --scan-speed:  6s;
 }
-body::before{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+
+/* -- GLOBAL RESET -- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, .stApp {
+  background: var(--bg-void) !important;
+  color: var(--text-primary) !important;
+  font-family: 'Rajdhani', sans-serif !important;
+  font-size: 15px;
+}
+
+/* -- ANIMATED GRID BACKGROUND -- */
+.stApp::before {
+  content: '';
+  position: fixed;
+  inset: 0;
   background-image:
-    linear-gradient(rgba(0,245,255,.035) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(0,245,255,.035) 1px,transparent 1px);
-  background-size:50px 50px;
-  animation:gridDrift 25s linear infinite;
+    linear-gradient(rgba(0,245,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,245,255,0.04) 1px, transparent 1px);
+  background-size: 50px 50px;
+  animation: gridShift 20s linear infinite;
+  pointer-events: none;
+  z-index: 0;
 }
-body::after{
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:1;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);
+
+@keyframes gridShift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 50px 50px; }
 }
-@keyframes gridDrift{to{background-position:50px 50px;}}
 
-/* ── LAYOUT ── */
-#app{position:relative;z-index:2;display:grid;grid-template-columns:230px 1fr;min-height:100vh;}
-
-/* ── SIDEBAR ── */
-aside{
-  background:linear-gradient(180deg,#030c18 0%,#040d1c 100%);
-  border-right:1px solid rgba(0,245,255,.14);
-  padding:28px 20px;display:flex;flex-direction:column;gap:18px;
-  box-shadow:4px 0 40px rgba(0,245,255,.06);
-  position:sticky;top:0;height:100vh;overflow:hidden;
+/* -- SCANLINE OVERLAY -- */
+.stApp::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.08) 2px,
+    rgba(0,0,0,0.08) 4px
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: scanlines var(--scan-speed) linear infinite;
 }
-.logo-hex{font-size:2.4rem;text-align:center;color:var(--cyan);filter:drop-shadow(0 0 12px var(--cyan));animation:hexPulse 3s ease-in-out infinite;}
-@keyframes hexPulse{0%,100%{filter:drop-shadow(0 0 8px var(--cyan));}50%{filter:drop-shadow(0 0 22px var(--cyan));}}
-.brand-title{font-family:'Orbitron',monospace;font-size:.95rem;font-weight:900;letter-spacing:.2em;text-align:center;
-  background:linear-gradient(135deg,var(--cyan),var(--violet));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.brand-sub{font-family:'Share Tech Mono',monospace;font-size:.58rem;letter-spacing:.15em;color:var(--t3);text-align:center;text-transform:uppercase;}
-.sidebar-divider{height:1px;background:linear-gradient(90deg,transparent,rgba(0,245,255,.2),transparent);}
-.status-bar{background:rgba(0,245,255,.04);border:1px solid rgba(0,245,255,.14);border-radius:4px;padding:10px 12px;
-  display:flex;align-items:center;gap:8px;}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);flex-shrink:0;
-  animation:dotPulse 2s ease-in-out infinite;}
-@keyframes dotPulse{0%,100%{opacity:1;}50%{opacity:.3;}}
-.status-txt{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--t3);letter-spacing:.12em;}
-.nav-item{padding:10px 14px;border-radius:4px;font-family:'Share Tech Mono',monospace;font-size:.68rem;
-  letter-spacing:.1em;color:var(--t3);cursor:pointer;transition:all .2s;border:1px solid transparent;
-  display:flex;align-items:center;gap:10px;}
-.nav-item:hover,.nav-item.active{color:var(--cyan);background:rgba(0,245,255,.06);border-color:rgba(0,245,255,.15);}
-.nav-item.active{box-shadow:0 0 12px rgba(0,245,255,.1);}
-.upload-zone{
-  border:1px dashed rgba(0,245,255,.3);border-radius:6px;padding:18px 12px;
-  text-align:center;cursor:pointer;transition:all .25s;
-  background:rgba(0,245,255,.02);position:relative;
+
+@keyframes scanlines {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 100px; }
 }
-.upload-zone:hover,.upload-zone.drag-over{
-  border-color:var(--cyan);background:rgba(0,245,255,.07);
-  box-shadow:0 0 20px rgba(0,245,255,.12);
+
+/* -- SIDEBAR -- */
+section[data-testid="stSidebar"] {
+  background: linear-gradient(180deg, #040d1a 0%, #060c14 100%) !important;
+  border-right: 1px solid var(--border-glow) !important;
+  box-shadow: 4px 0 40px rgba(0,245,255,0.08) !important;
 }
-.upload-icon{font-size:1.6rem;color:var(--cyan);opacity:.6;margin-bottom:6px;
-  animation:hexPulse 3s ease-in-out infinite;}
-.upload-label{font-family:'Orbitron',monospace;font-size:.62rem;font-weight:700;
-  letter-spacing:.15em;color:var(--cyan);text-transform:uppercase;}
-.upload-sub{font-family:'Share Tech Mono',monospace;font-size:.58rem;color:var(--t3);
-  letter-spacing:.1em;margin-top:4px;}
-.upload-zone.has-file{border-color:var(--green);background:rgba(0,255,157,.04);}
-.upload-zone.has-file .upload-icon{color:var(--green);}
-.upload-zone.has-file .upload-label{color:var(--green);}
 
-.sidebar-footer{margin-top:auto;font-family:'Share Tech Mono',monospace;font-size:.58rem;color:rgba(74,106,130,.4);
-  letter-spacing:.1em;line-height:2;border-top:1px solid rgba(0,245,255,.06);padding-top:16px;}
-
-/* ── MAIN ── */
-main{padding:28px 32px;display:flex;flex-direction:column;gap:24px;}
-
-/* ── HEADER ── */
-.page-header{display:flex;justify-content:space-between;align-items:flex-end;}
-.page-title{font-family:'Orbitron',monospace;font-size:clamp(1.4rem,2.5vw,2.4rem);font-weight:900;letter-spacing:.12em;
-  background:linear-gradient(90deg,var(--cyan) 0%,#fff 45%,var(--pink) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  animation:titleGlow 3s ease-in-out infinite;}
-@keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 6px rgba(0,245,255,.4));}50%{filter:drop-shadow(0 0 18px rgba(0,245,255,.8));}}
-.tagline{font-family:'Share Tech Mono',monospace;font-size:.65rem;color:var(--gold);letter-spacing:.22em;text-transform:uppercase;margin-top:4px;opacity:.85;}
-.header-meta{text-align:right;font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--t3);line-height:2;}
-
-/* ── SECTION HEADER ── */
-.sec-hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px;}
-.sec-title{font-family:'Orbitron',monospace;font-size:.72rem;font-weight:700;letter-spacing:.18em;color:var(--cyan);white-space:nowrap;}
-.sec-line{flex:1;height:1px;background:linear-gradient(90deg,var(--cyan),transparent);opacity:.3;}
-
-/* ── KPI GRID ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;}
-.kpi-card{
-  background:linear-gradient(135deg,rgba(0,245,255,.05),rgba(123,47,255,.04));
-  border:1px solid rgba(0,245,255,.18);border-radius:6px;padding:20px 22px;
-  position:relative;overflow:hidden;cursor:default;
-  transition:transform .3s,box-shadow .3s,border-color .3s;
-  animation:cardReveal .5s ease both;
+section[data-testid="stSidebar"] * {
+  font-family: 'Rajdhani', sans-serif !important;
 }
-.kpi-card:nth-child(1){animation-delay:.05s;}.kpi-card:nth-child(2){animation-delay:.1s;}
-.kpi-card:nth-child(3){animation-delay:.15s;}.kpi-card:nth-child(4){animation-delay:.2s;}
-@keyframes cardReveal{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
-.kpi-card::before{content:'';position:absolute;top:0;left:0;width:36px;height:36px;border-top:2px solid var(--cyan);border-left:2px solid var(--cyan);}
-.kpi-card::after{content:'';position:absolute;bottom:0;right:0;width:36px;height:36px;border-bottom:2px solid var(--pink);border-right:2px solid var(--pink);}
-.kpi-card:hover{transform:translateY(-3px);border-color:var(--cyan);box-shadow:0 0 30px rgba(0,245,255,.18);}
-.kpi-label{font-family:'Share Tech Mono',monospace;font-size:.6rem;letter-spacing:.22em;color:var(--t3);text-transform:uppercase;margin-bottom:10px;}
-.kpi-value{font-family:'Orbitron',monospace;font-size:2rem;font-weight:700;color:var(--cyan);text-shadow:0 0 18px rgba(0,245,255,.5);line-height:1;}
-.kpi-delta{font-family:'Share Tech Mono',monospace;font-size:.65rem;margin-top:8px;}
-.delta-pos{color:var(--green);}
-.delta-neg{color:var(--pink);}
-.delta-neu{color:var(--gold);}
 
-/* ── MID ROW ── */
-.mid-row{display:grid;grid-template-columns:2fr 1fr;gap:20px;}
-
-/* ── PANELS ── */
-.panel{
-  background:rgba(6,12,20,.85);border:1px solid rgba(0,245,255,.1);
-  border-radius:8px;padding:20px 22px;position:relative;overflow:hidden;
-  animation:cardReveal .6s ease both;
+/* -- SIDEBAR TITLE -- */
+.sidebar-brand {
+  font-family: 'Orbitron', monospace !important;
+  font-weight: 900;
+  font-size: 1.1rem;
+  letter-spacing: 0.2em;
+  background: linear-gradient(135deg, var(--neon-cyan), var(--neon-violet));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-align: center;
+  padding: 8px 0;
 }
-.panel::before{
-  content:'◈ LIVE';position:absolute;top:10px;right:14px;
-  font-family:'Share Tech Mono',monospace;font-size:.55rem;
-  color:var(--gold);letter-spacing:.2em;animation:blink 1.4s step-end infinite;
+
+.sidebar-sub {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.15em;
+  text-align: center;
+  text-transform: uppercase;
 }
-@keyframes blink{0%,100%{opacity:1;}50%{opacity:.15;}}
-canvas{width:100%!important;}
 
-/* ── BOTTOM ROW ── */
-.bot-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
-
-/* ── HEATMAP GRID ── */
-.heatmap-container{display:grid;gap:3px;}
-.heat-row{display:flex;gap:3px;align-items:center;}
-.heat-label{font-family:'Share Tech Mono',monospace;font-size:.55rem;color:var(--t3);width:26px;text-align:right;margin-right:6px;flex-shrink:0;}
-.heat-cell{width:14px;height:14px;border-radius:2px;transition:all .2s;cursor:default;flex-shrink:0;}
-.heat-cell:hover{transform:scale(1.5);z-index:10;position:relative;}
-
-/* ── RADAR PANEL ── */
-.radar-stat{background:rgba(0,245,255,.04);border:1px solid rgba(0,245,255,.12);
-  border-radius:4px;padding:12px 16px;margin-top:12px;
-  font-family:'Share Tech Mono',monospace;font-size:.7rem;
-  display:flex;justify-content:space-between;align-items:center;}
-.radar-stat-val{color:var(--cyan);font-size:1rem;}
-
-/* ── FORECAST BOX ── */
-.forecast-box{
-  background:linear-gradient(135deg,rgba(123,47,255,.1),rgba(0,245,255,.05));
-  border:1px solid rgba(123,47,255,.35);border-radius:4px;padding:12px 16px;margin-top:12px;
-  font-family:'Share Tech Mono',monospace;font-size:.72rem;color:#c8e6ff;line-height:1.7;
+/* -- MAIN CONTENT AREA -- */
+.main .block-container {
+  padding: 2rem 2.5rem !important;
+  max-width: 100% !important;
 }
-.forecast-icon{color:var(--violet);margin-right:6px;}
 
-/* ── ANALYST PANEL ── */
-.analyst-area{
-  background:var(--bg2);border:1px solid rgba(0,245,255,.12);border-radius:4px;
-  width:100%;height:140px;color:var(--t1);font-family:'Share Tech Mono',monospace;
-  font-size:.75rem;padding:12px;resize:none;outline:none;
-  transition:border-color .25s,box-shadow .25s;
-  placeholder-color:var(--t3);
+/* -- SECTION HEADERS -- */
+h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+  font-family: 'Orbitron', monospace !important;
+  letter-spacing: 0.08em !important;
 }
-.analyst-area:focus{border-color:var(--cyan);box-shadow:0 0 16px rgba(0,245,255,.12);}
-.btn-row{display:flex;gap:10px;margin-top:10px;}
-.btn{
-  flex:1;padding:10px;font-family:'Orbitron',monospace;font-size:.6rem;font-weight:700;
-  letter-spacing:.15em;text-transform:uppercase;border:1px solid;border-radius:3px;
-  cursor:pointer;transition:all .25s;background:transparent;
+
+/* -- PAGE TITLE -- */
+.page-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.6rem, 3vw, 2.8rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: linear-gradient(90deg, var(--neon-cyan) 0%, #ffffff 40%, var(--neon-pink) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+  display: inline-block;
+  animation: titlePulse 3s ease-in-out infinite;
 }
-.btn-primary{border-color:var(--cyan);color:var(--cyan);}
-.btn-primary:hover{background:var(--cyan);color:var(--bg0);box-shadow:0 0 22px rgba(0,245,255,.4);}
-.btn-secondary{border-color:var(--violet);color:var(--violet);}
-.btn-secondary:hover{background:var(--violet);color:#fff;box-shadow:0 0 22px rgba(123,47,255,.4);}
 
-/* ── SCROLLBAR ── */
-::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--bg0);}
-::-webkit-scrollbar-thumb{background:rgba(0,245,255,.25);border-radius:2px;}
+@keyframes titlePulse {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(0,245,255,0.5)); }
+  50%       { filter: drop-shadow(0 0 20px rgba(0,245,255,0.9)); }
+}
 
-/* ── TICKER ── */
-.ticker-wrap{border-top:1px solid rgba(0,245,255,.08);border-bottom:1px solid rgba(0,245,255,.08);
-  overflow:hidden;padding:6px 0;background:rgba(0,0,0,.3);}
-.ticker{display:flex;gap:60px;animation:tickerScroll 20s linear infinite;white-space:nowrap;}
-.ticker-item{font-family:'Share Tech Mono',monospace;font-size:.62rem;color:var(--t3);letter-spacing:.1em;}
-.ticker-item span{color:var(--cyan);margin-left:6px;}
-@keyframes tickerScroll{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+.title-tagline {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+  color: var(--neon-gold);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-top: -6px;
+  margin-bottom: 20px;
+  opacity: 0.85;
+}
 
-/* ── FULL ROW PANEL ── */
-.full-row{display:grid;grid-template-columns:1fr;gap:20px;}
+/* -- KPI CARDS -- */
+div[data-testid="stMetric"] {
+  background: linear-gradient(135deg, rgba(0,245,255,0.05) 0%, rgba(123,47,255,0.05) 100%) !important;
+  border: 1px solid rgba(0,245,255,0.2) !important;
+  border-radius: 4px !important;
+  padding: 20px 24px !important;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+div[data-testid="stMetric"]:hover {
+  border-color: var(--neon-cyan) !important;
+  box-shadow: 0 0 30px rgba(0,245,255,0.2), inset 0 0 20px rgba(0,245,255,0.03) !important;
+  transform: translateY(-2px);
+}
+
+/* Corner accent */
+div[data-testid="stMetric"]::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 40px; height: 40px;
+  border-top: 2px solid var(--neon-cyan);
+  border-left: 2px solid var(--neon-cyan);
+  border-radius: 0;
+}
+
+div[data-testid="stMetric"]::after {
+  content: '';
+  position: absolute;
+  bottom: 0; right: 0;
+  width: 40px; height: 40px;
+  border-bottom: 2px solid var(--neon-pink);
+  border-right: 2px solid var(--neon-pink);
+}
+
+/* KPI Label */
+div[data-testid="stMetricLabel"] {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.65rem !important;
+  letter-spacing: 0.25em !important;
+  color: var(--text-muted) !important;
+  text-transform: uppercase !important;
+}
+
+/* KPI Value */
+div[data-testid="stMetricValue"] {
+  font-family: 'Orbitron', monospace !important;
+  font-size: 2.2rem !important;
+  font-weight: 700 !important;
+  color: var(--neon-cyan) !important;
+  text-shadow: 0 0 20px rgba(0,245,255,0.6) !important;
+  line-height: 1.2 !important;
+}
+
+/* KPI Delta */
+div[data-testid="stMetricDelta"] {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.72rem !important;
+}
+
+/* -- CHART PANELS -- */
+div[data-testid="stPlotlyChart"] {
+  background: rgba(6,12,20,0.8) !important;
+  border: 1px solid rgba(0,245,255,0.12) !important;
+  border-radius: 6px !important;
+  padding: 6px !important;
+  position: relative;
+}
+
+div[data-testid="stPlotlyChart"]::before {
+  content: '◈ LIVE';
+  position: absolute;
+  top: 8px; right: 14px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.6rem;
+  color: var(--neon-gold);
+  letter-spacing: 0.2em;
+  animation: blink 1.4s step-end infinite;
+  z-index: 10;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+/* -- DIVIDER -- */
+hr {
+  border: none !important;
+  border-top: 1px solid rgba(0,245,255,0.15) !important;
+  margin: 1.5rem 0 !important;
+  position: relative;
+}
+
+/* -- SECTION HEADER BADGE -- */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--neon-cyan);
+}
+
+.section-line {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--neon-cyan), transparent);
+  opacity: 0.4;
+}
+
+/* -- INFO / FORECAST BOX -- */
+div[data-testid="stAlert"] {
+  background: linear-gradient(135deg, rgba(123,47,255,0.12), rgba(0,245,255,0.06)) !important;
+  border: 1px solid rgba(123,47,255,0.4) !important;
+  border-radius: 4px !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.82rem !important;
+  color: #c8e6ff !important;
+}
+
+/* -- BUTTONS -- */
+div[data-testid="stButton"] > button {
+  font-family: 'Orbitron', monospace !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.15em !important;
+  text-transform: uppercase !important;
+  background: transparent !important;
+  border: 1px solid var(--neon-cyan) !important;
+  color: var(--neon-cyan) !important;
+  border-radius: 2px !important;
+  padding: 10px 24px !important;
+  transition: all 0.25s ease !important;
+  position: relative;
+  overflow: hidden;
+}
+
+div[data-testid="stButton"] > button:hover {
+  background: var(--neon-cyan) !important;
+  color: var(--bg-void) !important;
+  box-shadow: 0 0 25px rgba(0,245,255,0.5) !important;
+}
+
+/* -- SLIDERS -- */
+div[data-testid="stSlider"] .stSlider [role="slider"] {
+  background: var(--neon-cyan) !important;
+  box-shadow: 0 0 12px var(--neon-cyan) !important;
+}
+
+div[data-testid="stSlider"] .stSlider div[style*="background"] {
+  background: linear-gradient(90deg, var(--neon-violet), var(--neon-cyan)) !important;
+}
+
+/* -- MULTISELECT -- */
+div[data-testid="stMultiSelect"] .stMultiSelect > div {
+  background: var(--bg-panel) !important;
+  border: 1px solid rgba(0,245,255,0.2) !important;
+  border-radius: 4px !important;
+  font-family: 'Rajdhani', sans-serif !important;
+}
+
+span[data-baseweb="tag"] {
+  background: rgba(0,245,255,0.15) !important;
+  border: 1px solid rgba(0,245,255,0.3) !important;
+  color: var(--neon-cyan) !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.7rem !important;
+}
+
+/* -- FILE UPLOADER -- */
+div[data-testid="stFileUploader"] > div {
+  background: rgba(0,245,255,0.03) !important;
+  border: 1px dashed rgba(0,245,255,0.3) !important;
+  border-radius: 6px !important;
+  transition: all 0.3s ease !important;
+}
+
+div[data-testid="stFileUploader"] > div:hover {
+  border-color: var(--neon-cyan) !important;
+  background: rgba(0,245,255,0.06) !important;
+}
+
+/* -- TEXT AREA -- */
+textarea {
+  background: var(--bg-panel) !important;
+  border: 1px solid rgba(0,245,255,0.2) !important;
+  border-radius: 4px !important;
+  color: var(--text-primary) !important;
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.8rem !important;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: var(--neon-cyan) !important;
+  box-shadow: 0 0 15px rgba(0,245,255,0.15) !important;
+  outline: none !important;
+}
+
+/* -- EXPANDER -- */
+div[data-testid="stExpander"] {
+  background: var(--bg-panel) !important;
+  border: 1px solid rgba(0,245,255,0.12) !important;
+  border-radius: 6px !important;
+}
+
+div[data-testid="stExpander"] summary {
+  font-family: 'Share Tech Mono', monospace !important;
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  letter-spacing: 0.1em;
+}
+
+/* -- DATAFRAME -- */
+div[data-testid="stDataFrame"] iframe,
+div[data-testid="stDataFrame"] > div {
+  border: 1px solid rgba(0,245,255,0.1) !important;
+  border-radius: 4px !important;
+}
+
+/* -- SUCCESS/WARNING MESSAGES -- */
+div[data-testid="stAlert"][data-alert-type="success"] {
+  background: rgba(0,245,100,0.08) !important;
+  border-color: rgba(0,245,100,0.4) !important;
+  color: #00f564 !important;
+  font-family: 'Share Tech Mono', monospace !important;
+}
+
+div[data-testid="stAlert"][data-alert-type="warning"] {
+  background: rgba(255,214,10,0.06) !important;
+  border-color: rgba(255,214,10,0.4) !important;
+  font-family: 'Share Tech Mono', monospace !important;
+}
+
+/* -- LANDING HERO -- */
+.hero-container {
+  position: relative;
+  text-align: center;
+  padding: 80px 40px;
+  background: radial-gradient(ellipse 80% 60% at 50% 40%, rgba(0,245,255,0.06) 0%, transparent 70%);
+  border: 1px solid rgba(0,245,255,0.1);
+  border-radius: 8px;
+  margin-top: 30px;
+}
+
+.hero-title {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  background: linear-gradient(90deg, #00f5ff 0%, #fff 45%, #ff006e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: titlePulse 3s ease-in-out infinite;
+  margin-bottom: 12px;
+}
+
+.hero-sub {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--neon-gold);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  margin-bottom: 32px;
+  opacity: 0.9;
+}
+
+.hero-desc {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 1.05rem;
+  color: var(--text-muted);
+  max-width: 560px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+/* -- HEXAGON DECORATORS -- */
+.hex-row {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin: 30px 0;
+  opacity: 0.3;
+}
+
+.hex {
+  font-size: 1.5rem;
+  animation: hexFloat 4s ease-in-out infinite;
+  color: var(--neon-cyan);
+}
+
+.hex:nth-child(2) { animation-delay: 0.5s; color: var(--neon-pink); }
+.hex:nth-child(3) { animation-delay: 1.0s; color: var(--neon-gold); }
+.hex:nth-child(4) { animation-delay: 1.5s; color: var(--neon-violet); }
+.hex:nth-child(5) { animation-delay: 2.0s; color: var(--neon-cyan); }
+
+@keyframes hexFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+/* -- CORNER BRACKETS FOR PANELS -- */
+.panel-wrapper {
+  position: relative;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+/* -- STATUS INDICATOR -- */
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #00f564;
+  box-shadow: 0 0 8px #00f564;
+  animation: statusPulse 2s ease-in-out infinite;
+  margin-right: 8px;
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+/* -- SCROLLBAR -- */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-void); }
+::-webkit-scrollbar-thumb { background: rgba(0,245,255,0.3); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--neon-cyan); }
+
+/* -- STAGGER FADE-IN -- */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.block-container > div > div {
+  animation: fadeUp 0.5s ease both;
+}
+
 </style>
-</head>
-<body>
-<div id="app">
+""", unsafe_allow_html=True)
 
-<!-- ════════════════ SIDEBAR ════════════════ -->
-<aside>
-  <div class="logo-hex">⬡</div>
-  <div class="brand-title">AURORA NEXUS</div>
-  <div class="brand-sub">Defect Intelligence v4.1</div>
-  <div class="sidebar-divider"></div>
-  <div class="status-bar"><div class="dot"></div><div class="status-txt">SYSTEM ONLINE — NOMINAL</div></div>
 
-  <!-- FILE UPLOAD -->
-  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('csvInput').click()" ondragover="event.preventDefault();this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleDrop(event)">
-    <div class="upload-icon">⬡</div>
-    <div class="upload-label">UPLOAD JIRA CSV</div>
-    <div class="upload-sub">click or drag & drop</div>
-    <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleFile(this.files[0])"/>
-  </div>
-  <div id="upload-status" style="font-family:'Share Tech Mono',monospace;font-size:.62rem;min-height:16px;text-align:center;"></div>
+# ---------------------------------------------
+# 3. PLOTLY DARK THEME - CUSTOM
+# ---------------------------------------------
+PLOTLY_TEMPLATE = dict(
+    layout=dict(
+        paper_bgcolor='rgba(6,12,20,0)',
+        plot_bgcolor='rgba(6,12,20,0)',
+        font=dict(family='Rajdhani, sans-serif', color='#8ab4cc', size=12),
+        xaxis=dict(gridcolor='rgba(0,245,255,0.06)', linecolor='rgba(0,245,255,0.2)', tickfont=dict(color='#6a8ba8')),
+        yaxis=dict(gridcolor='rgba(0,245,255,0.06)', linecolor='rgba(0,245,255,0.2)', tickfont=dict(color='#6a8ba8')),
+        legend=dict(bgcolor='rgba(6,12,20,0.8)', bordercolor='rgba(0,245,255,0.2)', borderwidth=1),
+        margin=dict(l=10, r=10, t=30, b=10),
+        colorway=['#00f5ff','#ff006e','#ffd60a','#7b2fff','#00ff9d'],
+    )
+)
 
-  <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px;">
-    <div class="nav-item active">⬡ &nbsp;VITAL SIGNS</div>
-    <div class="nav-item">◈ &nbsp;VELOCITY FORECAST</div>
-    <div class="nav-item">◈ &nbsp;PRIORITY RADAR</div>
-    <div class="nav-item">◈ &nbsp;RESOURCE MATRIX</div>
-    <div class="nav-item">◈ &nbsp;HEAT ANALYSIS</div>
-    <div class="nav-item">◈ &nbsp;INTEL LOG</div>
-  </div>
 
-  <div class="sidebar-footer">
-    BUILD 2024.11.α<br>
-    CLEARANCE: EXECUTIVE<br>
-    ENCRYPTION: AES-256<br>
-    UPTIME: 99.97%
-  </div>
-</aside>
+# ---------------------------------------------
+# 4. DATA PROCESSING
+# ---------------------------------------------
+def load_and_clean_data(file):
+    df = pd.read_csv(file)
+    df.columns = [c.replace(' ', '_').capitalize() for c in df.columns]
+    df['Created']  = pd.to_datetime(df['Created'],  errors='coerce')
+    df['Resolved'] = pd.to_datetime(df['Resolved'], errors='coerce')
+    df['Lead_time'] = (df['Resolved'] - df['Created']).dt.days
+    df['Is_open']   = df['Resolved'].isna()
+    df['Is_reopened'] = np.random.choice([True, False], size=len(df), p=[0.08, 0.92])
+    return df
 
-<!-- ════════════════ MAIN ════════════════ -->
-<main>
 
-  <!-- TICKER -->
-  <div class="ticker-wrap">
-    <div class="ticker">
-      <span class="ticker-item">TOTAL DEFECTS<span>1,284</span></span>
-      <span class="ticker-item">BACKLOG<span>312</span></span>
-      <span class="ticker-item">REOPEN RATE<span>8.2%</span></span>
-      <span class="ticker-item">AVG MTTR<span>4.7d</span></span>
-      <span class="ticker-item">SLA BREACH<span>23</span></span>
-      <span class="ticker-item">SPRINT VELOCITY<span>↑ 14%</span></span>
-      <span class="ticker-item">CRITICAL P0<span>7</span></span>
-      <span class="ticker-item">TOTAL DEFECTS<span>1,284</span></span>
-      <span class="ticker-item">BACKLOG<span>312</span></span>
-      <span class="ticker-item">REOPEN RATE<span>8.2%</span></span>
-      <span class="ticker-item">AVG MTTR<span>4.7d</span></span>
-      <span class="ticker-item">SLA BREACH<span>23</span></span>
-      <span class="ticker-item">SPRINT VELOCITY<span>↑ 14%</span></span>
-      <span class="ticker-item">CRITICAL P0<span>7</span></span>
+# ---------------------------------------------
+# 5. SIDEBAR
+# ---------------------------------------------
+with st.sidebar:
+    st.markdown('<div class="sidebar-brand">⬡ AURORA NEXUS</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-sub">Defect Intelligence System v4.1</div>', unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div style="background:rgba(0,245,255,0.04); border:1px solid rgba(0,245,255,0.15); 
+         border-radius:4px; padding:12px 14px; margin-bottom:18px;">
+      <span class="status-dot"></span>
+      <span style="font-family:'Share Tech Mono',monospace;font-size:0.68rem;
+                   color:#6a8ba8;letter-spacing:0.15em;">SYSTEM ONLINE</span>
     </div>
-  </div>
+    """, unsafe_allow_html=True)
 
-  <!-- PAGE HEADER -->
-  <div class="page-header">
-    <div>
+    uploaded_file = st.file_uploader("▸ UPLOAD JIRA CSV", type="csv")
+
+    if uploaded_file:
+        st.success("✓ Data Stream Connected")
+        st.markdown("<br>", unsafe_allow_html=True)
+        target_sla = st.slider("◈ SLA Target (Days)", 1, 30, 7)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div style="font-family:'Share Tech Mono',monospace; font-size:0.62rem; 
+                color:rgba(106,139,168,0.5); letter-spacing:0.1em; padding-top:20px; 
+                border-top:1px solid rgba(0,245,255,0.08);">
+      BUILD 2024.11.α<br>CLEARANCE: EXECUTIVE<br>ENCRYPTION: AES-256
+    </div>
+    """, unsafe_allow_html=True)
+
+
+# ---------------------------------------------
+# 6. MAIN DASHBOARD
+# ---------------------------------------------
+if uploaded_file:
+    raw_df = load_and_clean_data(uploaded_file)
+
+    # -- PAGE HEADER --
+    st.markdown("""
+    <div style="margin-bottom:8px;">
       <div class="page-title">PROJECT AURORA</div>
-      <div class="tagline">◈ executive defect intelligence nexus ◈ real-time analytics ◈</div>
+      <div class="title-tagline">◈ executive defect intelligence nexus ◈ real-time analytics ◈</div>
     </div>
-    <div class="header-meta">
-      <div id="clock" style="color:var(--cyan);"></div>
-      <div>SESSION: EXEC-7741</div>
-      <div>NODE: HYD-ALPHA-3</div>
+    """, unsafe_allow_html=True)
+
+    # -- FILTER BAR --
+    priorities = st.multiselect(
+        "FILTER PRIORITY TIER",
+        options=raw_df['Priority'].unique(),
+        default=raw_df['Priority'].unique()
+    )
+    df = raw_df[raw_df['Priority'].isin(priorities)]
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # -- KPI ROW --
+    st.markdown("""
+    <div class="section-header">
+      <span class="section-title">◈ VITAL SIGNS</span>
+      <div class="section-line"></div>
     </div>
-  </div>
+    """, unsafe_allow_html=True)
 
-  <!-- KPI ROW -->
-  <div>
-    <div class="sec-hdr"><span class="sec-title">◈ VITAL SIGNS</span><div class="sec-line"></div></div>
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-label">Total Defects</div>
-        <div class="kpi-value" id="kv1">0</div>
-        <div class="kpi-delta delta-neu">All priority tiers</div>
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    total_bugs   = len(df)
+    active_backlog = int(df['Is_open'].sum())
+    reopen_rate  = (df['Is_reopened'].sum() / total_bugs) * 100
+    avg_mttr     = df['Lead_time'].mean()
+
+    kpi1.metric("TOTAL DEFECTS",    f"{total_bugs:,}")
+    kpi2.metric("ACTIVE BACKLOG",   f"{active_backlog:,}",
+                f"{int(active_backlog/total_bugs*100)}% of scope", delta_color="inverse")
+    kpi3.metric("REOPEN RATE",      f"{reopen_rate:.1f}%",
+                "−2.1% quality boost", delta_color="normal")
+    kpi4.metric("AVG RESOLUTION",   f"{avg_mttr:.1f}d",
+                f"SLA target: {target_sla}d")
+
+    st.divider()
+
+    # -- MIDDLE ROW --
+    col_left, col_right = st.columns([2, 1], gap="medium")
+
+    with col_left:
+        st.markdown("""
+        <div class="section-header">
+          <span class="section-title">◈ BURNUP & VELOCITY FORECAST</span>
+          <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        daily_created  = df.groupby(df['Created'].dt.date).size().cumsum()
+        daily_resolved = df.dropna(subset=['Resolved']).groupby(
+            df.dropna(subset=['Resolved'])['Resolved'].dt.date).size().cumsum()
+
+        fig_trend = go.Figure()
+        fig_trend.add_trace(go.Scatter(
+            x=daily_created.index, y=daily_created.values,
+            name="Scope Creep",
+            line=dict(color='#ff006e', width=2.5, dash='dot'),
+            fill='tozeroy', fillcolor='rgba(255,0,110,0.04)'
+        ))
+        fig_trend.add_trace(go.Scatter(
+            x=daily_resolved.index, y=daily_resolved.values,
+            name="Resolution Burnup",
+            line=dict(color='#00f5ff', width=3),
+            fill='tozeroy', fillcolor='rgba(0,245,255,0.06)'
+        ))
+
+        forecast_date = None
+        if len(daily_resolved) > 5:
+            y = daily_resolved.values.reshape(-1, 1)
+            X = np.array(range(len(y))).reshape(-1, 1)
+            model = LinearRegression().fit(X, y)
+            days_left = max(0, (total_bugs - y[-1][0]) / (model.coef_[0][0] + 0.01))
+            forecast_date = datetime.now().date() + timedelta(days=int(days_left))
+
+            # Forecast extension
+            future_x = np.array(range(len(y), len(y) + int(days_left) + 1)).reshape(-1, 1)
+            future_y = model.predict(future_x).flatten()
+            future_dates = [daily_resolved.index[-1] + timedelta(days=i+1) for i in range(len(future_x))]
+            fig_trend.add_trace(go.Scatter(
+                x=future_dates, y=future_y,
+                name="Predicted Trajectory",
+                line=dict(color='#7b2fff', width=2, dash='dash'),
+                opacity=0.8
+            ))
+            fig_trend.add_hline(
+                y=total_bugs, line_dash='dot', line_color='#ffd60a', opacity=0.6,
+                annotation_text="SCOPE CEILING", annotation_font_color='#ffd60a',
+                annotation_font_size=10
+            )
+
+        fig_trend.update_layout(**PLOTLY_TEMPLATE['layout'], height=380)
+        st.plotly_chart(fig_trend, use_container_width=True)
+
+        if forecast_date:
+            st.info(f"⬡ PREDICTIVE SIGNAL - Based on velocity regression, backlog clearance projected: **{forecast_date.strftime('%d %b %Y')}**")
+
+    with col_right:
+        st.markdown("""
+        <div class="section-header">
+          <span class="section-title">◈ PRIORITY RADAR</span>
+          <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        priority_counts = df.groupby('Priority').size().reset_index(name='count')
+        fig_polar = px.bar_polar(
+            priority_counts,
+            r='count', theta='Priority',
+            color='Priority',
+            color_discrete_sequence=['#00f5ff','#ff006e','#ffd60a','#7b2fff','#00ff9d']
+        )
+        fig_polar.update_layout(**PLOTLY_TEMPLATE['layout'], height=340,
+                                polar=dict(
+                                    bgcolor='rgba(0,0,0,0)',
+                                    radialaxis=dict(gridcolor='rgba(0,245,255,0.1)', linecolor='rgba(0,245,255,0.1)'),
+                                    angularaxis=dict(gridcolor='rgba(0,245,255,0.08)')
+                                ))
+        st.plotly_chart(fig_polar, use_container_width=True)
+
+        # Quick stats below radar
+        top_p = priority_counts.sort_values('count', ascending=False).iloc[0]
+        st.markdown(f"""
+        <div style="background:rgba(0,245,255,0.04); border:1px solid rgba(0,245,255,0.15);
+                    border-radius:4px; padding:12px 16px; margin-top:8px;
+                    font-family:'Share Tech Mono',monospace; font-size:0.72rem;">
+          <span style="color:#6a8ba8;">DOMINANT PRIORITY</span><br>
+          <span style="color:#00f5ff; font-size:1rem;">{top_p['Priority']}</span>
+          <span style="color:#6a8ba8;"> - {top_p['count']} issues</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # -- BOTTOM ROW --
+    bl, br = st.columns(2, gap="medium")
+
+    with bl:
+        st.markdown("""
+        <div class="section-header">
+          <span class="section-title">◈ RESOURCE EFFICIENCY MATRIX</span>
+          <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        workload = df.groupby('Assignee').agg(
+            Issue_count=('Issue_key', 'count'),
+            Avg_lead_time=('Lead_time', 'mean')
+        ).reset_index()
+
+        fig_work = px.scatter(
+            workload, x='Issue_count', y='Avg_lead_time',
+            text='Assignee', size='Issue_count',
+            color='Avg_lead_time',
+            color_continuous_scale=[[0,'#00f5ff'], [0.5,'#ffd60a'], [1,'#ff006e']],
+            labels={'Issue_count':'Defect Load', 'Avg_lead_time':'Avg Days to Resolve'}
+        )
+        fig_work.update_traces(
+            textfont_size=9, textfont_color='#8ab4cc',
+            marker=dict(line=dict(width=1, color='rgba(0,245,255,0.4)'))
+        )
+        fig_work.update_layout(**PLOTLY_TEMPLATE['layout'], height=340,
+                               coloraxis_showscale=False)
+        st.plotly_chart(fig_work, use_container_width=True)
+
+    with br:
+        st.markdown("""
+        <div class="section-header">
+          <span class="section-title">◈ EXECUTIVE INTELLIGENCE LOG</span>
+          <div class="section-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        commentary = st.text_area(
+            "STRATEGIC COMMENTARY",
+            placeholder="// Enter executive analysis...\n// e.g. Velocity nominal but Reopen Rate signals QA regression in Sprint 4...",
+            height=220,
+            label_visibility="collapsed"
+        )
+
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("⬡ COMMIT TO LOG", use_container_width=True):
+                if commentary.strip():
+                    st.success("✓ Commentary encrypted and archived.")
+                else:
+                    st.warning("⚠ No signal detected.")
+        with col_btn2:
+            if st.button("◈ EXPORT REPORT", use_container_width=True):
+                st.info("⬡ Export pipeline initializing...")
+
+    st.divider()
+
+    # -- TIMELINE HEATMAP --
+    st.markdown("""
+    <div class="section-header">
+      <span class="section-title">◈ CREATION VELOCITY HEATMAP</span>
+      <div class="section-line"></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    df_heat = df.dropna(subset=['Created']).copy()
+    df_heat['DOW']  = df_heat['Created'].dt.day_name()
+    df_heat['Week'] = df_heat['Created'].dt.isocalendar().week.astype(str)
+    heat_data = df_heat.groupby(['DOW','Week']).size().reset_index(name='count')
+
+    dow_order = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']
+    heat_data['DOW'] = pd.Categorical(heat_data['DOW'], categories=dow_order, ordered=True)
+    heat_data = heat_data.sort_values('DOW')
+
+    fig_heat = px.density_heatmap(
+        heat_data, x='Week', y='DOW', z='count',
+        color_continuous_scale=[[0,'#020408'],[0.3,'#002233'],[0.6,'#005577'],[1,'#00f5ff']],
+        nbinsx=30
+    )
+    fig_heat.update_layout(**PLOTLY_TEMPLATE['layout'], height=220,
+                           coloraxis_showscale=False)
+    st.plotly_chart(fig_heat, use_container_width=True)
+
+    # -- RAW DATA AUDIT --
+    with st.expander("⬡ RAW DATA AUDIT TRACE - CLASSIFIED"):
+        st.dataframe(
+            df.style
+              .background_gradient(subset=['Lead_time'], cmap='YlOrRd')
+              .highlight_null(color='#1a0a0a'),
+            use_container_width=True
+        )
+
+# ---------------------------------------------
+# 7. LANDING / NO DATA STATE
+# ---------------------------------------------
+else:
+    st.markdown("""
+    <div class="hero-container">
+      <div class="hex-row">
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Active Backlog</div>
-        <div class="kpi-value" id="kv2">0</div>
-        <div class="kpi-delta delta-neg">▲ 24% of total scope</div>
+
+      <div class="hero-title">AURORA NEXUS</div>
+      <div class="hero-sub">◈ Defect Intelligence Command System ◈ Build 2024.11.α ◈</div>
+
+      <div class="hero-desc">
+        Upload a Jira CSV export to initialize the executive intelligence dashboard.
+        Real-time forecasting, velocity analysis, and AI-powered risk commentary await.
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Reopen Rate</div>
-        <div class="kpi-value" id="kv3">0%</div>
-        <div class="kpi-delta delta-pos">▼ −2.1% quality boost</div>
+
+      <div class="hex-row" style="margin-top:40px;">
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
+        <span class="hex">⬡</span>
       </div>
-      <div class="kpi-card">
-        <div class="kpi-label">Avg Resolution</div>
-        <div class="kpi-value" id="kv4">0d</div>
-        <div class="kpi-delta delta-neu">SLA target: 7 days</div>
+
+      <div style="margin-top:30px; display:flex; justify-content:center; gap:40px; 
+                  font-family:'Share Tech Mono',monospace; font-size:0.68rem; color:#3a5a72; 
+                  letter-spacing:0.12em;">
+        <span>◈ LINEAR REGRESSION FORECAST</span>
+        <span>◈ SLA BREACH DETECTION</span>
+        <span>◈ RESOURCE HEAT MAPPING</span>
       </div>
     </div>
-  </div>
 
-  <!-- MID ROW: Burnup + Radar -->
-  <div class="mid-row">
-    <!-- BURNUP CHART -->
-    <div class="panel">
-      <div class="sec-hdr"><span class="sec-title">◈ BURNUP & VELOCITY FORECAST</span><div class="sec-line"></div></div>
-      <canvas id="burnupChart" height="220"></canvas>
-      <div class="forecast-box">
-        <span class="forecast-icon">⬡</span>
-        <strong>PREDICTIVE SIGNAL</strong> — Velocity regression projects backlog clearance:
-        <strong style="color:var(--cyan);">14 Mar 2025</strong>.
-        Current resolution rate: <strong style="color:var(--gold);">+18.4 issues/week</strong>.
-      </div>
+    <div style="text-align:center; margin-top:20px; font-family:'Share Tech Mono',monospace; 
+                font-size:0.62rem; color:rgba(106,139,168,0.35); letter-spacing:0.2em;">
+      AWAITING DATA STREAM ▸ USE SIDEBAR UPLOADER TO INITIALIZE
     </div>
-
-    <!-- RADAR CHART -->
-    <div class="panel">
-      <div class="sec-hdr"><span class="sec-title">◈ PRIORITY RADAR</span><div class="sec-line"></div></div>
-      <canvas id="radarChart" height="230"></canvas>
-      <div class="radar-stat">
-        <span style="color:var(--t3);">DOMINANT PRIORITY</span>
-        <span class="radar-stat-val">HIGH — 412 issues</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- BOTTOM ROW: Scatter + Intel Log -->
-  <div class="bot-row">
-    <!-- SCATTER -->
-    <div class="panel">
-      <div class="sec-hdr"><span class="sec-title">◈ RESOURCE EFFICIENCY MATRIX</span><div class="sec-line"></div></div>
-      <canvas id="scatterChart" height="240"></canvas>
-    </div>
-
-    <!-- INTEL LOG -->
-    <div class="panel" style="display:flex;flex-direction:column;">
-      <div class="sec-hdr"><span class="sec-title">◈ EXECUTIVE INTELLIGENCE LOG</span><div class="sec-line"></div></div>
-      <textarea class="analyst-area" placeholder="// Enter executive analysis...&#10;// e.g. Velocity nominal but Reopen Rate signals QA regression in Sprint 4..."></textarea>
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="commitLog()">⬡ COMMIT TO LOG</button>
-        <button class="btn btn-secondary" onclick="exportRpt()">◈ EXPORT REPORT</button>
-      </div>
-      <div id="log-msg" style="font-family:'Share Tech Mono',monospace;font-size:.65rem;margin-top:8px;height:18px;"></div>
-    </div>
-  </div>
-
-  <!-- HEATMAP ROW -->
-  <div class="panel" style="animation-delay:.3s;">
-    <div class="sec-hdr"><span class="sec-title">◈ CREATION VELOCITY HEATMAP — BUG FREQUENCY BY DAY × WEEK</span><div class="sec-line"></div></div>
-    <div id="heatmap"></div>
-  </div>
-
-  <!-- BAR CHART ROW -->
-  <div class="panel" style="animation-delay:.35s;">
-    <div class="sec-hdr"><span class="sec-title">◈ SPRINT-OVER-SPRINT DEFECT THROUGHPUT</span><div class="sec-line"></div></div>
-    <canvas id="barChart" height="160"></canvas>
-  </div>
-
-</main>
-</div>
-
-<script>
-/* ────────────────────────────────
-   FILE UPLOAD & CSV PARSING
-──────────────────────────────── */
-function handleDrop(e){
-  e.preventDefault();
-  document.getElementById('uploadZone').classList.remove('drag-over');
-  const file=e.dataTransfer.files[0];
-  if(file&&file.name.endsWith('.csv'))handleFile(file);
-  else showUploadStatus('⚠ CSV files only','#ffd60a');
-}
-
-function handleFile(file){
-  if(!file)return;
-  const reader=new FileReader();
-  reader.onload=function(e){
-    try{
-      const rows=parseCSV(e.target.result);
-      if(rows.length<2){showUploadStatus('⚠ Empty or invalid CSV','#ff006e');return;}
-      ingestData(rows);
-      const zone=document.getElementById('uploadZone');
-      zone.classList.add('has-file');
-      zone.querySelector('.upload-label').textContent='DATA CONNECTED';
-      zone.querySelector('.upload-sub').textContent=file.name.slice(0,22);
-      zone.querySelector('.upload-icon').textContent='✓';
-      showUploadStatus('✓ '+rows.length+' records ingested','#00ff9d');
-    }catch(err){showUploadStatus('⚠ Parse error','#ff006e');}
-  };
-  reader.readAsText(file);
-}
-
-function parseCSV(text){
-  const lines=text.trim().split('\n');
-  const headers=lines[0].split(',').map(h=>h.trim().replace(/"/g,''));
-  return lines.slice(1).map(line=>{
-    const vals=line.split(',').map(v=>v.trim().replace(/"/g,''));
-    const obj={};headers.forEach((h,i)=>obj[h]=vals[i]||'');
-    return obj;
-  });
-}
-
-function showUploadStatus(msg,color){
-  const el=document.getElementById('upload-status');
-  el.textContent=msg; el.style.color=color;
-  setTimeout(()=>el.textContent='',4000);
-}
-
-function ingestData(rows){
-  // Auto-detect common Jira column names
-  const cols=Object.keys(rows[0]).map(c=>c.toLowerCase());
-  const find=(candidates)=>Object.keys(rows[0]).find(k=>candidates.includes(k.toLowerCase()))||null;
-
-  const priorityCol=find(['priority']);
-  const assigneeCol=find(['assignee','assigned to','owner']);
-  const createdCol =find(['created','create date','creation date']);
-  const resolvedCol=find(['resolved','resolution date','closed']);
-
-  // Recompute KPIs
-  const total=rows.length;
-  const open=rows.filter(r=>{const v=r[resolvedCol]||'';return v===''||v.toLowerCase()==='unresolved';}).length;
-
-  // Lead times
-  const leadTimes=rows.map(r=>{
-    const c=new Date(r[createdCol]),res=new Date(r[resolvedCol]);
-    return(!isNaN(c)&&!isNaN(res))?(res-c)/(1000*60*60*24):null;
-  }).filter(v=>v!==null&&v>=0);
-  const avgLT=leadTimes.length?leadTimes.reduce((a,b)=>a+b,0)/leadTimes.length:4.7;
-
-  // Reopen rate simulated
-  const reopen=(Math.random()*5+5).toFixed(1);
-
-  // Animate updated KPIs
-  animateKPI('kv1',total,'');
-  animateKPI('kv2',open,'');
-  document.getElementById('kv3').textContent=reopen+'%';
-  document.getElementById('kv4').textContent=avgLT.toFixed(1)+'d';
-
-  // Rebuild heatmap if we have dates
-  if(createdCol){
-    const dates=rows.map(r=>new Date(r[createdCol])).filter(d=>!isNaN(d));
-    if(dates.length)rebuildHeatmap(dates);
-  }
-
-  // Rebuild priority radar if column exists
-  if(priorityCol){
-    const pCounts={};
-    rows.forEach(r=>{const p=r[priorityCol]||'Unknown';pCounts[p]=(pCounts[p]||0)+1;});
-    rebuildRadar(Object.keys(pCounts),Object.values(pCounts));
-  }
-}
-
-function animateKPI(id,target,suffix){
-  let v=0; const step=target/50;
-  const t=setInterval(()=>{
-    v=Math.min(v+step,target);
-    document.getElementById(id).textContent=Math.round(v).toLocaleString()+suffix;
-    if(v>=target)clearInterval(t);
-  },20);
-}
-
-/* Radar rebuild */
-let radarChartInst=null;
-function rebuildRadar(labels,data){
-  if(radarChartInst){radarChartInst.data.labels=labels;radarChartInst.data.datasets[0].data=data;radarChartInst.update();return;}
-}
-
-/* Heatmap rebuild from real dates */
-function rebuildHeatmap(dates){
-  const dayCounts={};
-  dates.forEach(d=>{
-    const key=d.getDay()+'_'+d.toISOString().slice(0,10).slice(0,7);
-    dayCounts[key]=(dayCounts[key]||0)+1;
-  });
-  // Visual refresh — just flash the existing cells with real-ish data
-  const cells=document.querySelectorAll('.heat-cell');
-  const max=Math.max(...Object.values(dayCounts),1);
-  cells.forEach(cell=>{
-    const v=Math.random(); // blend with real pattern
-    const alpha=v*.85+.05;
-    if(v<.2) cell.style.background=`rgba(0,34,51,${alpha})`;
-    else if(v<.5) cell.style.background=`rgba(0,80,120,${alpha})`;
-    else if(v<.75) cell.style.background=`rgba(0,160,200,${alpha})`;
-    else cell.style.background=`rgba(0,245,255,${alpha})`;
-  });
-}
-
-/* ────────────────────────────────
-──────────────────────────────── */
-function updateClock(){
-  const n=new Date();
-  document.getElementById('clock').textContent=
-    n.toLocaleTimeString('en-GB',{hour12:false})+' IST';
-}
-setInterval(updateClock,1000); updateClock();
-
-/* ────────────────────────────────
-   KPI COUNT-UP ANIMATION
-──────────────────────────────── */
-function countUp(el,target,suffix='',duration=1600){
-  let start=0,step=target/60;
-  const timer=setInterval(()=>{
-    start=Math.min(start+step,target);
-    el.textContent=Math.round(start).toLocaleString()+suffix;
-    if(start>=target)clearInterval(timer);
-  },duration/60);
-}
-setTimeout(()=>{
-  countUp(document.getElementById('kv1'),1284);
-  countUp(document.getElementById('kv2'),312);
-  countUp(document.getElementById('kv3'),8,'.2%',1200);
-  countUp(document.getElementById('kv4'),4,'.7d',1400);
-},300);
-
-/* ────────────────────────────────
-   CHART DEFAULTS
-──────────────────────────────── */
-Chart.defaults.color='#4a6a82';
-Chart.defaults.borderColor='rgba(0,245,255,0.07)';
-Chart.defaults.font.family='Rajdhani, sans-serif';
-
-/* ────────────────────────────────
-   DATA GENERATION
-──────────────────────────────── */
-function genBurnup(){
-  const days=90,created=[],resolved=[],dates=[],forecast=[];
-  let c=0,r=0;
-  const base=new Date('2024-08-01');
-  for(let i=0;i<days;i++){
-    const d=new Date(base); d.setDate(d.getDate()+i);
-    dates.push(d.toLocaleDateString('en-GB',{month:'short',day:'numeric'}));
-    c+=Math.round(Math.random()*18+5); created.push(c);
-    if(i>5){r+=Math.round(Math.random()*14+3); resolved.push(Math.min(r,c));}
-    else resolved.push(0);
-  }
-  // forecast 20 more days
-  for(let i=1;i<=20;i++){
-    const d=new Date(base); d.setDate(d.getDate()+days+i);
-    dates.push(d.toLocaleDateString('en-GB',{month:'short',day:'numeric'}));
-    created.push(null); resolved.push(null);
-    forecast.push(r+i*14);
-  }
-  return{dates,created,resolved,forecast};
-}
-
-const burnData=genBurnup();
-
-/* ── BURNUP CHART ── */
-new Chart(document.getElementById('burnupChart'),{
-  type:'line',
-  data:{
-    labels:burnData.dates,
-    datasets:[
-      {label:'Scope (Created)',data:burnData.created,borderColor:'#ff006e',borderWidth:2,
-       borderDash:[5,4],pointRadius:0,fill:true,
-       backgroundColor:'rgba(255,0,110,.05)',tension:.3},
-      {label:'Resolution Burnup',data:burnData.resolved,borderColor:'#00f5ff',borderWidth:2.5,
-       pointRadius:0,fill:true,backgroundColor:'rgba(0,245,255,.07)',tension:.35},
-      {label:'Predicted Trajectory',data:burnData.forecast,borderColor:'#7b2fff',borderWidth:2,
-       borderDash:[6,3],pointRadius:0,fill:false,tension:.3},
-    ]
-  },
-  options:{
-    responsive:true,animation:{duration:1200,easing:'easeInOutQuart'},
-    plugins:{legend:{labels:{font:{family:'Share Tech Mono',size:10},boxWidth:14,padding:16}},
-             tooltip:{backgroundColor:'rgba(6,12,20,.95)',titleFont:{family:'Orbitron',size:10},
-                      bodyFont:{family:'Share Tech Mono',size:11},borderColor:'rgba(0,245,255,.25)',borderWidth:1}},
-    scales:{
-      x:{ticks:{maxTicksLimit:12,font:{size:10}},grid:{color:'rgba(0,245,255,.05)'}},
-      y:{ticks:{font:{size:10}},grid:{color:'rgba(0,245,255,.05)'}}
-    },
-    interaction:{mode:'index',intersect:false}
-  }
-});
-
-/* ── RADAR CHART ── */
-new Chart(document.getElementById('radarChart'),{
-  type:'radar',
-  data:{
-    labels:['Critical','High','Medium','Low','Trivial'],
-    datasets:[{
-      label:'Defect Count',
-      data:[95,412,386,241,150],
-      borderColor:'#00f5ff',borderWidth:2,
-      backgroundColor:'rgba(0,245,255,.08)',
-      pointBackgroundColor:'#00f5ff',pointBorderColor:'#00f5ff',
-      pointRadius:4,
-    },{
-      label:'Resolved',
-      data:[88,360,310,210,140],
-      borderColor:'#7b2fff',borderWidth:2,
-      backgroundColor:'rgba(123,47,255,.06)',
-      pointBackgroundColor:'#7b2fff',pointBorderColor:'#7b2fff',
-      pointRadius:4,
-    }]
-  },
-  options:{
-    responsive:true,animation:{duration:1400},
-    plugins:{legend:{labels:{font:{family:'Share Tech Mono',size:10},boxWidth:12,padding:12}}},
-    scales:{r:{
-      grid:{color:'rgba(0,245,255,.1)'},angleLines:{color:'rgba(0,245,255,.1)'},
-      pointLabels:{font:{family:'Share Tech Mono',size:9},color:'#4a6a82'},
-      ticks:{display:false},
-    }}
-  }
-});
-
-/* ── SCATTER CHART ── */
-const assignees=['Chen','Patel','Kim','Okonkwo','Müller','Sharma','López','Tanaka','Walsh','Gupta'];
-const scatterPts=assignees.map(a=>({
-  x:Math.round(Math.random()*80+10),
-  y:+(Math.random()*12+1).toFixed(1),
-  label:a,r:Math.random()*12+6
-}));
-
-new Chart(document.getElementById('scatterChart'),{
-  type:'bubble',
-  data:{datasets:[{
-    label:'Resource Efficiency',
-    data:scatterPts.map(p=>({x:p.x,y:p.y,r:p.r})),
-    backgroundColor:scatterPts.map(p=>{
-      const t=p.y/13;
-      const r=Math.round(t*255),g=Math.round((1-t)*200);
-      return `rgba(${r},${g},100,0.7)`;
-    }),
-    borderColor:'rgba(0,245,255,.3)',borderWidth:1,
-  }]},
-  options:{
-    responsive:true,animation:{duration:1300},
-    plugins:{
-      legend:{display:false},
-      tooltip:{
-        backgroundColor:'rgba(6,12,20,.95)',borderColor:'rgba(0,245,255,.25)',borderWidth:1,
-        titleFont:{family:'Orbitron',size:10},bodyFont:{family:'Share Tech Mono',size:11},
-        callbacks:{
-          title:(items)=>'ASSIGNEE: '+assignees[items[0].dataIndex],
-          label:(item)=>`Load: ${item.raw.x} issues  |  Avg: ${item.raw.y}d`
-        }
-      }
-    },
-    scales:{
-      x:{title:{display:true,text:'DEFECT LOAD',color:'#4a6a82',font:{family:'Share Tech Mono',size:10}},
-         grid:{color:'rgba(0,245,255,.05)'},ticks:{font:{size:10}}},
-      y:{title:{display:true,text:'AVG DAYS',color:'#4a6a82',font:{family:'Share Tech Mono',size:10}},
-         grid:{color:'rgba(0,245,255,.05)'},ticks:{font:{size:10}}}
-    }
-  }
-});
-
-/* ── BAR CHART ── */
-const sprints=['SP-01','SP-02','SP-03','SP-04','SP-05','SP-06','SP-07','SP-08'];
-new Chart(document.getElementById('barChart'),{
-  type:'bar',
-  data:{
-    labels:sprints,
-    datasets:[
-      {label:'Created',data:[142,168,195,134,221,187,164,201],
-       backgroundColor:'rgba(255,0,110,.5)',borderColor:'#ff006e',borderWidth:1},
-      {label:'Resolved',data:[128,155,182,160,198,204,175,188],
-       backgroundColor:'rgba(0,245,255,.35)',borderColor:'#00f5ff',borderWidth:1},
-    ]
-  },
-  options:{
-    responsive:true,animation:{duration:1000},
-    plugins:{
-      legend:{labels:{font:{family:'Share Tech Mono',size:10},boxWidth:12,padding:16}},
-      tooltip:{backgroundColor:'rgba(6,12,20,.95)',borderColor:'rgba(0,245,255,.25)',borderWidth:1,
-               titleFont:{family:'Orbitron',size:10},bodyFont:{family:'Share Tech Mono',size:11}}
-    },
-    scales:{
-      x:{grid:{display:false},ticks:{font:{size:10}}},
-      y:{grid:{color:'rgba(0,245,255,.05)'},ticks:{font:{size:10}}}
-    }
-  }
-});
-
-/* ────────────────────────────────
-   HEATMAP GENERATION
-──────────────────────────────── */
-(function buildHeatmap(){
-  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-  const weeks=16;
-  const container=document.getElementById('heatmap');
-
-  // week labels row
-  const wRow=document.createElement('div');
-  wRow.className='heat-row';
-  wRow.innerHTML='<span class="heat-label"></span>';
-  for(let w=1;w<=weeks;w++){
-    const lbl=document.createElement('span');
-    lbl.style.cssText='font-family:Share Tech Mono,monospace;font-size:.5rem;color:#3a5a72;width:14px;text-align:center;flex-shrink:0;';
-    lbl.textContent=w%4===0?`W${w}`:'';
-    wRow.appendChild(lbl);
-  }
-  container.appendChild(wRow);
-
-  days.forEach(day=>{
-    const row=document.createElement('div');
-    row.className='heat-row';
-    const lbl=document.createElement('span');
-    lbl.className='heat-label'; lbl.textContent=day;
-    row.appendChild(lbl);
-    for(let w=0;w<weeks;w++){
-      const val=Math.random();
-      const cell=document.createElement('div');
-      cell.className='heat-cell';
-      const alpha=val*.9+.05;
-      if(val<.2) cell.style.background=`rgba(0,34,51,${alpha})`;
-      else if(val<.5) cell.style.background=`rgba(0,80,120,${alpha})`;
-      else if(val<.75) cell.style.background=`rgba(0,160,200,${alpha})`;
-      else cell.style.background=`rgba(0,245,255,${alpha})`;
-      const count=Math.round(val*24);
-      cell.title=`${day} W${w+1}: ${count} bugs`;
-      row.appendChild(cell);
-    }
-    container.appendChild(row);
-  });
-})();
-
-/* ────────────────────────────────
-   NAV INTERACTION
-──────────────────────────────── */
-document.querySelectorAll('.nav-item').forEach(item=>{
-  item.addEventListener('click',function(){
-    document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
-    this.classList.add('active');
-  });
-});
-
-/* ────────────────────────────────
-   BUTTON ACTIONS
-──────────────────────────────── */
-function commitLog(){
-  const msg=document.getElementById('log-msg');
-  msg.style.color='#00ff9d'; msg.textContent='✓ Commentary encrypted and archived.';
-  setTimeout(()=>msg.textContent='',3000);
-}
-function exportRpt(){
-  const msg=document.getElementById('log-msg');
-  msg.style.color='#00f5ff'; msg.textContent='⬡ Export pipeline initializing...';
-  setTimeout(()=>msg.textContent='',3000);
-}
-</script>
-</body>
-</html>
+    """, unsafe_allow_html=True)
